@@ -1,4 +1,4 @@
-import React, { FC, useEffect, useState } from 'react';
+import React, { FC, useEffect, useState, useCallback } from 'react';
 import { collection, onSnapshot, Timestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../../providers/useAuth';
 import { IReport, IDataPoint } from '../../../types';
@@ -12,146 +12,116 @@ interface ReportProps {
     setCategoryFilter: (filter: string) => void;
 }
 
-const generateExcel = (data: IReport[], filename: string) => {
-    const worksheetData = data.map((report) => ({
-        "п/п": report.n,
-        "Заказчик": report.customer,
-        "Подразделение": report.division,
-        "Вид работ": report.work,
-        "Наименование ТУ": report.nameTY,
-        "Рег №ТУ": report.regTY,
-        "Зав №ТУ": report.zavTY,
-        "УЗТ": report.YZT && Object.keys(report.YZT).length > 0 ? 'Да' : '-',
-        "ВИК": report.VIK && Object.keys(report.VIK).length > 0 ? 'Да' : '-',
-        "ЦД": report.CD && Object.keys(report.CD).length > 0 ? 'Да' : '-',
-        "УЗК": report.YZK && Object.keys(report.YZK).length > 0 ? 'Да' : '-',
-        "ТВ": report.TV && Object.keys(report.TV).length > 0 ? 'Да' : '-',
-        "РК": report.RK && Object.keys(report.RK).length > 0 ? 'Да' : '-',
-        "Результат": report.result,
-        "Дефект": report.defect,
-        "Номер отчета": report.number,
-        "Логин создателя": report.login,
-        "Дата и время": report.createdAt instanceof Timestamp ? (
-            new Intl.DateTimeFormat('ru-RU', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-                hour: 'numeric',
-                minute: 'numeric',
-            }).format(report.createdAt.toDate())
-        ) : ('Нет даты')
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Reports");
-    XLSX.writeFile(workbook, filename);
-};
-
 const Report: FC<ReportProps> = ({ categoryFilter, setCategoryFilter }) => {
     const { id } = useParams<{ id: string }>();
-    const { db } = useAuth();
-    const { user, ga } = useAuth();
-    const [error, setError] = useState('');
+    const { db, user } = useAuth();
     const [reports, setReports] = useState<IReport[]>([]);
     const [editingReportId, setEditingReportId] = useState<string | null>(null);
     const [editedValues, setEditedValues] = useState<Record<string, Partial<IReport>>>({});
 
-    useEffect(() => {
-        const fetchReports = async () => {
-            const unsub = onSnapshot(collection(db, 'unsubmitted_reports'), (snapshot) => {
-                const reportData: IReport[] = [];
+    const generateExcel = useCallback((data: IReport[], filename: string) => {
+        const worksheetData = data.map((report) => ({
+            "п/п": report.n,
+            "Заказчик": report.customer,
+            "Подразделение": report.division,
+            "Вид работ": report.work,
+            "Наименование ТУ": report.nameTY,
+            "Рег №ТУ": report.regTY,
+            "Зав №ТУ": report.zavTY,
+            "УЗТ": report.YZT && Object.keys(report.YZT).length > 0 ? 'Да' : '-',
+            "ВИК": report.VIK && Object.keys(report.VIK).length > 0 ? 'Да' : '-',
+            "ЦД": report.CD && Object.keys(report.CD).length > 0 ? 'Да' : '-',
+            "УЗК": report.YZK && Object.keys(report.YZK).length > 0 ? 'Да' : '-',
+            "ТВ": report.TV && Object.keys(report.TV).length > 0 ? 'Да' : '-',
+            "РК": report.RK && Object.keys(report.RK).length > 0 ? 'Да' : '-',
+            "Результат": report.result,
+            "Дефект": report.defect,
+            "Номер отчета": report.number,
+            "Логин создателя": report.login,
+            "Дата и время": report.createdAt instanceof Timestamp ? (
+                new Intl.DateTimeFormat('ru-RU', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: 'numeric',
+                }).format(report.createdAt.toDate())
+            ) : ('Нет даты')
+        }));
 
-                snapshot.forEach((docSnapshot) => {
-                    const report = {
-                        id: docSnapshot.id,
-                        ...docSnapshot.data() as Omit<IReport, 'id'>
-                    };
-                    if (id === report.id && (categoryFilter === '' || report.customer.includes(categoryFilter))) {
-                        reportData.push(report);
-                    }
-                });
-                setReports(reportData);
-            }, (error) => {
-                setError(error.message);
-            });
-            return () => {
-                unsub();
-            };
-        };
-        fetchReports();
+        const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Reports");
+        XLSX.writeFile(workbook, filename);
+    }, []);
+
+    useEffect(() => {
+        const unsub = onSnapshot(collection(db, 'unsubmitted_reports'), (snapshot) => {
+            const reportData = snapshot.docs
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data() as Omit<IReport, 'id'>
+                }))
+                .filter(report => id === report.id && (categoryFilter === '' || report.customer.includes(categoryFilter)));
+            
+            setReports(reportData);
+        });
+        
+        return () => unsub();
     }, [db, categoryFilter, id]);
 
-    const downloadSelectedReport = () => {
+    const downloadSelectedReport = useCallback(() => {
         generateExcel(reports, 'reports.xlsx');
-    };
+    }, [reports, generateExcel]);
 
-    const deleteSelectedReports = async (reportId: string, userId: string) => {
-        if (userId !== user?._id) {
-            console.log('Unauthorized access to delete report');
-            return;
-        }
+    const deleteSelectedReports = useCallback(async (reportId: string) => {
         try {
             await deleteDoc(doc(db, 'unsubmitted_reports', reportId));
-            setReports((prevReports) => prevReports.filter((report) => report.id !== reportId));
+            setReports(prev => prev.filter(report => report.id !== reportId));
         } catch (error) {
             console.error('Error deleting report:', error);
         }
-    };
+    }, [db]);
 
-    const handleDeleteClick = () => {
-        const userId = user?.email;
-        if (userId !== 'admin@gmail.com') {
-            return;
-        }
-        const selectedReports = reports.filter(r => r.selected);
-        if (!userId) {
-            console.log('User ID is undefined');
-            return;
-        }
-        selectedReports.forEach(report => {
-            deleteSelectedReports(report.id, user._id);
+    const handleDeleteClick = useCallback(() => {
+        if (user?.email !== 'admin@gmail.com') return;
+        reports.forEach(report => {
+            if (report.selected) deleteSelectedReports(report.id);
         });
-    };
+    }, [reports, deleteSelectedReports, user]);
 
-    const handleEditClick = (reportId: string) => {
+    const handleEditClick = useCallback((reportId: string) => {
         if (user?.email === 'admin@gmail.com') {
             setEditingReportId(reportId);
-        } else {
-            return;
         }
-    };
+    }, [user]);
 
-    const handleSaveClick = async (reportId: string) => {
+    const handleSaveClick = useCallback(async (reportId: string) => {
         try {
-            // Находим отчет который нужно обновить
             const reportToUpdate = reports.find(report => report.id === reportId);
             if (!reportToUpdate) return;
 
-            // Получаем отредактированные значения
             const updatedValues = editedValues[reportId] || {};
-
-            // Обновляем данные в Firestore
             const reportRef = doc(db, 'unsubmitted_reports', reportId);
-            await updateDoc(reportRef, {
-                ...reportToUpdate,
-                ...updatedValues
-            });
-
-            // Сбрасываем состояние редактирования
+            
+            await updateDoc(reportRef, updatedValues);
             setEditingReportId(null);
             setEditedValues({});
         } catch (error) {
             console.error('Error updating report:', error);
         }
-    };
+    }, [reports, editedValues, db]);
 
-    const handleCancelClick = () => {
+    const handleCancelClick = useCallback(() => {
         setEditingReportId(null);
         setEditedValues({});
-    };
+    }, []);
 
-    const handleInputChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, reportId: string, field: keyof IReport) => {
+    const handleInputChange = useCallback((
+        event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, 
+        reportId: string, 
+        field: keyof IReport
+    ) => {
         const value = event.target.value;
         setEditedValues(prev => ({
             ...prev,
@@ -160,43 +130,57 @@ const Report: FC<ReportProps> = ({ categoryFilter, setCategoryFilter }) => {
                 [field]: value,
             },
         }));
-    };
+    }, []);
 
-    const isAdmin = user?.email === 'admin@gmail.com';
-
-    const handleChange = (
+    const handleChange = useCallback((
         reportId: string,
         dataPointKey: keyof IReport,
         field: 'a' | 'b' | 'c' | 'd',
         index: number,
         value: string
     ) => {
-        setReports(prevReports => {
-            return prevReports.map(report => {
-                if (report.id === reportId) {
-                    const currentDataPoint = report[dataPointKey];
-                    if (!currentDataPoint || typeof currentDataPoint !== 'object') {
-                        return report;
-                    }
+        setReports(prev => prev.map(report => {
+            if (report.id !== reportId) return report;
+            
+            const currentDataPoint = report[dataPointKey];
+            if (!currentDataPoint || typeof currentDataPoint !== 'object') return report;
 
-                    const dataPoint = { ...currentDataPoint as IDataPoint };
-                    const updatedArray = [...(dataPoint[field] || [])];
-                    updatedArray[index] = value;
+            const dataPoint = { ...currentDataPoint as IDataPoint };
+            const updatedArray = [...(dataPoint[field] || [])];
+            updatedArray[index] = value;
 
-                    return {
-                        ...report,
-                        [dataPointKey]: {
-                            ...dataPoint,
-                            [field]: updatedArray
-                        }
-                    };
+            return {
+                ...report,
+                [dataPointKey]: {
+                    ...dataPoint,
+                    [field]: updatedArray
                 }
-                return report;
-            });
-        });
-    };
+            };
+        }));
+    }, []);
 
-    const renderDataPoints = (dataPoint: IDataPoint | undefined, reportId: string, dataPointKey: keyof IReport) => {
+    const addDataRow = useCallback((reportId: string, dataPointKey: keyof IReport) => {
+        setReports(prev => prev.map(report => {
+            if (report.id !== reportId) return report;
+            
+            const currentDataPoint = report[dataPointKey];
+            if (!currentDataPoint || typeof currentDataPoint !== 'object') return report;
+
+            const dataPoint = { ...currentDataPoint as IDataPoint };
+            
+            return {
+                ...report,
+                [dataPointKey]: {
+                    a: [...(dataPoint.a || []), ''],
+                    b: [...(dataPoint.b || []), ''],
+                    c: [...(dataPoint.c || []), ''],
+                    d: [...(dataPoint.d || []), ''],
+                }
+            };
+        }));
+    }, []);
+
+    const renderDataPoints = useCallback((dataPoint: IDataPoint | undefined, reportId: string, dataPointKey: keyof IReport) => {
         if (!dataPoint) return null;
 
         const a = dataPoint.a || [];
@@ -209,7 +193,6 @@ const Report: FC<ReportProps> = ({ categoryFilter, setCategoryFilter }) => {
             <>
                 {Array.from({ length: maxLength }, (_, index) => (
                     <TableRow key={index}>
-                        {/* Поле a - всегда присутствует */}
                         <TableCell>
                             <TextField
                                 value={a[index] || ''}
@@ -219,8 +202,6 @@ const Report: FC<ReportProps> = ({ categoryFilter, setCategoryFilter }) => {
                                 fullWidth
                             />
                         </TableCell>
-
-                        {/* Поле b - всегда присутствует */}
                         <TableCell>
                             <TextField
                                 value={b[index] || ''}
@@ -230,8 +211,6 @@ const Report: FC<ReportProps> = ({ categoryFilter, setCategoryFilter }) => {
                                 fullWidth
                             />
                         </TableCell>
-
-                        {/* Поле c - всегда присутствует */}
                         <TableCell>
                             <TextField
                                 value={c[index] || ''}
@@ -241,9 +220,7 @@ const Report: FC<ReportProps> = ({ categoryFilter, setCategoryFilter }) => {
                                 fullWidth
                             />
                         </TableCell>
-
-                        {/* Поле d - только для определенных типов таблиц */}
-                        {(dataPointKey === 'TV') && (
+                        {dataPointKey === 'TV' && (
                             <TableCell>
                                 <TextField
                                     value={d[index] || ''}
@@ -258,136 +235,90 @@ const Report: FC<ReportProps> = ({ categoryFilter, setCategoryFilter }) => {
                 ))}
             </>
         );
-    };
+    }, [handleChange]);
 
-    const addDataRow = (reportId: string, dataPointKey: keyof IReport) => {
-        setReports(prevReports => {
-            return prevReports.map(report => {
-                if (report.id === reportId) {
-                    const currentDataPoint = report[dataPointKey];
-                    if (!currentDataPoint || typeof currentDataPoint !== 'object') {
-                        return report;
-                    }
+    const renderHeaderRow = (label: string, field: keyof Omit<IReport, 'YZT' | 'VIK' | 'CD' | 'YZK' | 'TV' | 'RK'>) => (
+        <TableRow>
+            <TableCell>{label}</TableCell>
+            {reports.map(report => (
+                <TableCell key={report.id}>
+                    {editingReportId === report.id && user?.email === 'admin@gmail.com' ? (
+                        <TextField
+                            defaultValue={report[field] as string}
+                            onChange={(e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => 
+                                handleInputChange(e, report.id, field)}
+                        />
+                    ) : (
+                        report[field] as string
+                    )}
+                </TableCell>
+            ))}
+        </TableRow>
+    );
 
-                    const dataPoint = { ...currentDataPoint as IDataPoint };
+    const renderTableSection = (
+        title: string, 
+        dataPointKey: keyof Pick<IReport, 'YZT' | 'VIK' | 'CD' | 'YZK' | 'TV' | 'RK'>, 
+        headers: string[], 
+        hasDColumn = false
+    ) => (
+        <div style={{ flex: 1, marginRight: '10px' }}>
+            <TableContainer component={Paper} style={{ width: '100%' }}>
+                <Table style={{ width: '100%' }}>
+                    <TableHead>
+                        <TableRow>
+                            <TableCell colSpan={hasDColumn ? 4 : 3} style={{ textAlign: 'center', fontWeight: 'bold' }}>
+                                {title}
+                            </TableCell>
+                        </TableRow>
+                        <TableRow>
+                            {headers.map(header => (
+                                <TableCell key={header}>{header}</TableCell>
+                            ))}
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {reports.map(report => (
+                            <React.Fragment key={report.id}>
+                                {renderDataPoints(report[dataPointKey] as IDataPoint | undefined, report.id, dataPointKey)}
+                                {editingReportId === report.id && (
+                                    <TableRow>
+                                        <TableCell colSpan={hasDColumn ? 4 : 3} align="center">
+                                            <Button
+                                                variant="outlined"
+                                                onClick={() => addDataRow(report.id, dataPointKey)}
+                                            >
+                                                Добавить строку
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </React.Fragment>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        </div>
+    );
 
-                    return {
-                        ...report,
-                        [dataPointKey]: {
-                            a: [...(dataPoint.a || []), ''],
-                            b: [...(dataPoint.b || []), ''],
-                            c: [...(dataPoint.c || []), ''],
-                            d: [...(dataPoint.d || []), ''],
-                        }
-                    };
-                }
-                return report;
-            });
-        });
-    };
+    const isAdmin = user?.email === 'admin@gmail.com';
 
     return (
         <div>
-            <TableContainer style={{ width: '20%', marginRight: '20px' }}>
+            <TableContainer style={{ width: '30%', marginRight: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Table style={{ width: '80%' }}>
+                    <Table style={{ width: '100%' }}>
                         <TableBody>
-                            <TableRow>
-                                <TableCell>Заказчик</TableCell>
-                                {reports.map(report => (
-                                    <TableCell key={report.id}>
-                                        {editingReportId === report.id && isAdmin ? (
-                                            <TextField
-                                                defaultValue={report.customer}
-                                                onChange={(e) => handleInputChange(e, report.id, 'customer')}
-                                            />
-                                        ) : (
-                                            report.customer
-                                        )}
-                                    </TableCell>
-                                ))}
-                            </TableRow>
-                            <TableRow>
-                                <TableCell>Подразделение</TableCell>
-                                {reports.map(report => (
-                                    <TableCell key={report.id}>
-                                        {editingReportId === report.id && isAdmin ? (
-                                            <TextField
-                                                defaultValue={report.division}
-                                                onChange={(e) => handleInputChange(e, report.id, 'division')}
-                                            />
-                                        ) : (
-                                            report.division
-                                        )}
-                                    </TableCell>
-                                ))}
-                            </TableRow>
-                            <TableRow>
-                                <TableCell>Вид работ</TableCell>
-                                {reports.map(report => (
-                                    <TableCell key={report.id}>
-                                        {editingReportId === report.id && isAdmin ? (
-                                            <TextField
-                                                defaultValue={report.work}
-                                                onChange={(e) => handleInputChange(e, report.id, 'work')}
-                                            />
-                                        ) : (
-                                            report.work
-                                        )}
-                                    </TableCell>
-                                ))}
-                            </TableRow>
-                            <TableRow>
-                                <TableCell>Наименование ТУ</TableCell>
-                                {reports.map(report => (
-                                    <TableCell key={report.id}>
-                                        {editingReportId === report.id && isAdmin ? (
-                                            <TextField
-                                                defaultValue={report.nameTY}
-                                                onChange={(e) => handleInputChange(e, report.id, 'nameTY')}
-                                            />
-                                        ) : (
-                                            report.nameTY
-                                        )}
-                                    </TableCell>
-                                ))}
-                            </TableRow>
-                            <TableRow>
-                                <TableCell>Рег номер</TableCell>
-                                {reports.map(report => (
-                                    <TableCell key={report.id}>
-                                        {editingReportId === report.id && isAdmin ? (
-                                            <TextField
-                                                defaultValue={report.regTY}
-                                                onChange={(e) => handleInputChange(e, report.id, 'regTY')}
-                                            />
-                                        ) : (
-                                            report.regTY
-                                        )}
-                                    </TableCell>
-                                ))}
-                            </TableRow>
-                            <TableRow>
-                                <TableCell>Зав номер</TableCell>
-                                {reports.map(report => (
-                                    <TableCell key={report.id}>
-                                        {editingReportId === report.id && isAdmin ? (
-                                            <TextField
-                                                defaultValue={report.zavTY}
-                                                onChange={(e) => handleInputChange(e, report.id, 'zavTY')}
-                                            />
-                                        ) : (
-                                            report.zavTY
-                                        )}
-                                    </TableCell>
-                                ))}
-                            </TableRow>
+                            {renderHeaderRow('Заказчик', 'customer')}
+                            {renderHeaderRow('Подразделение', 'division')}
+                            {renderHeaderRow('Вид работ', 'work')}
+                            {renderHeaderRow('Наименование ТУ', 'nameTY')}
+                            {renderHeaderRow('Рег номер', 'regTY')}
+                            {renderHeaderRow('Зав номер', 'zavTY')}
                             <TableRow>
                                 <TableCell>Логин создателя</TableCell>
                                 {reports.map(report => (
-                                    <TableCell key={report.id}>
-                                        {report.login}
-                                    </TableCell>
+                                    <TableCell key={report.id}>{report.login}</TableCell>
                                 ))}
                             </TableRow>
                             <TableRow>
@@ -396,18 +327,17 @@ const Report: FC<ReportProps> = ({ categoryFilter, setCategoryFilter }) => {
                                     <TableCell key={report.id}>
                                         {report.createdAt instanceof Timestamp ? (
                                             new Intl.DateTimeFormat('ru-RU', {
-                                                day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: 'numeric',
+                                                day: 'numeric', month: 'long', year: 'numeric', 
+                                                hour: 'numeric', minute: 'numeric',
                                             }).format(report.createdAt.toDate())
-                                        ) : ('Нет даты')}
+                                        ) : 'Нет даты'}
                                     </TableCell>
                                 ))}
                             </TableRow>
                             <TableRow>
                                 <TableCell>Номер отчета</TableCell>
                                 {reports.map(report => (
-                                    <TableCell key={report.id}>
-                                        {report.number}
-                                    </TableCell>
+                                    <TableCell key={report.id}>{report.number}</TableCell>
                                 ))}
                             </TableRow>
                         </TableBody>
@@ -420,13 +350,6 @@ const Report: FC<ReportProps> = ({ categoryFilter, setCategoryFilter }) => {
                     Выгрузить отчет в эксель
                 </Button>
                 <Box display="flex" gap={1}>
-                    <Button
-                        variant="contained"
-                        onClick={handleDeleteClick}
-                        disabled={user?.email !== 'admin@gmail.com'}
-                    >
-                        Удалить
-                    </Button>
                     {reports.map(report => (
                         <Button
                             key={report.id}
@@ -437,242 +360,34 @@ const Report: FC<ReportProps> = ({ categoryFilter, setCategoryFilter }) => {
                             Редактировать
                         </Button>
                     ))}
+                    <Button
+                        variant="contained"
+                        onClick={handleDeleteClick}
+                        disabled={!isAdmin}
+                        color="error"
+                    >
+                        Удалить
+                    </Button>
                 </Box>
-                {reports.map(report => {
-                    if (editingReportId === report.id && isAdmin) {
-                        return (
-                            <Box key={report.id} display="flex" gap={1}>
-                                <Button
-                                    variant="contained"
-                                    onClick={() => handleSaveClick(report.id)}
-                                >
-                                    Сохранить
-                                </Button>
-                                <Button
-                                    variant="contained"
-                                    onClick={handleCancelClick}
-                                >
-                                    Отменить
-                                </Button>
-                            </Box>
-                        );
-                    }
-                    return null;
-                })}
+                {editingReportId && isAdmin && (
+                    <Box display="flex" gap={1}>
+                        <Button variant="contained" onClick={() => handleSaveClick(editingReportId)}>
+                            Сохранить
+                        </Button>
+                        <Button variant="contained" onClick={handleCancelClick}>
+                            Отменить
+                        </Button>
+                    </Box>
+                )}
             </Box>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
-                <div style={{ flex: 1, marginRight: '10px' }}>
-                    <TableContainer component={Paper} style={{ width: '100%' }}>
-                        <Table style={{ width: '100%' }}>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell colSpan={3} style={{ textAlign: 'center', fontWeight: 'bold' }}>УЗТ</TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>№точки</TableCell>
-                                    <TableCell>№элемента</TableCell>
-                                    <TableCell>Результат<br />замера</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {reports.map(report => (
-                                    <React.Fragment key={report.id}>
-                                        {renderDataPoints(report.YZT, report.id, 'YZT')}
-                                        {editingReportId === report.id && (
-                                            <TableRow>
-                                                <TableCell colSpan={3} align="center"> {/* Изменили colSpan с 4 на 3 */}
-                                                    <Button
-                                                        variant="outlined"
-                                                        onClick={() => addDataRow(report.id, 'YZT')}
-                                                    >
-                                                        Добавить строку
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </React.Fragment>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </div>
-                <div style={{ flex: 1, marginRight: '10px' }}>
-                    <TableContainer component={Paper} style={{ width: '100%' }}>
-                        <Table style={{ width: '100%' }}>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell colSpan={3} style={{ textAlign: 'center', fontWeight: 'bold' }}>ВИК</TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>№стыка/участка</TableCell>
-                                    <TableCell>Обнаруженные дефекты</TableCell>
-                                    <TableCell>Результат</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {reports.map(report => (
-                                    <React.Fragment key={report.id}>
-                                        {renderDataPoints(report.VIK, report.id, 'VIK')}
-                                        {editingReportId === report.id && (
-                                            <TableRow>
-                                                <TableCell colSpan={3} align="center">
-                                                    <Button
-                                                        variant="outlined"
-                                                        onClick={() => addDataRow(report.id, 'VIK')}
-                                                    >
-                                                        Добавить строку
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </React.Fragment>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </div>
-                <div style={{ flex: 1, marginRight: '10px' }}>
-                    <TableContainer component={Paper} style={{ width: '100%' }}>
-                        <Table style={{ width: '100%' }}>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell colSpan={3} style={{ textAlign: 'center', fontWeight: 'bold' }}>ЦД</TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>№стыка/участка</TableCell>
-                                    <TableCell>Обнаруженные дефекты</TableCell>
-                                    <TableCell>Результат</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {reports.map(report => (
-                                    <React.Fragment key={report.id}>
-                                        {renderDataPoints(report.CD, report.id, 'CD')}
-                                        {editingReportId === report.id && (
-                                            <TableRow>
-                                                <TableCell colSpan={3} align="center">
-                                                    <Button
-                                                        variant="outlined"
-                                                        onClick={() => addDataRow(report.id, 'CD')}
-                                                    >
-                                                        Добавить строку
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </React.Fragment>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </div>
-                <div style={{ flex: 1, marginRight: '10px' }}>
-                    <TableContainer component={Paper} style={{ width: '100%' }}>
-                        <Table style={{ width: '100%' }}>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell colSpan={3} style={{ textAlign: 'center', fontWeight: 'bold' }}>УЗК</TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>№<br />стыка</TableCell>
-                                    <TableCell>Дефект</TableCell>
-                                    <TableCell>Результат</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {reports.map(report => (
-                                    <React.Fragment key={report.id}>
-                                        {renderDataPoints(report.YZK, report.id, 'YZK')}
-                                        {editingReportId === report.id && (
-                                            <TableRow>
-                                                <TableCell colSpan={3} align="center">
-                                                    <Button
-                                                        variant="outlined"
-                                                        onClick={() => addDataRow(report.id, 'YZK')}
-                                                    >
-                                                        Добавить строку
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </React.Fragment>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </div>
-                <div style={{ flex: 1, marginRight: '10px' }}>
-                    <TableContainer component={Paper} style={{ width: '100%' }}>
-                        <Table style={{ width: '100%' }}>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell colSpan={4} style={{ textAlign: 'center', fontWeight: 'bold' }}>ТВ</TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>№стыка/<br />участка</TableCell>
-                                    <TableCell>Осн. мет</TableCell>
-                                    <TableCell>ЗТО</TableCell>
-                                    <TableCell>Шов</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {reports.map(report => (
-                                    <React.Fragment key={report.id}>
-                                        {renderDataPoints(report.TV, report.id, 'TV')}
-                                        {editingReportId === report.id && (
-                                            <TableRow>
-                                                <TableCell colSpan={4} align="center">
-                                                    <Button
-                                                        variant="outlined"
-                                                        onClick={() => addDataRow(report.id, 'TV')}
-                                                    >
-                                                        Добавить строку
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </React.Fragment>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </div>
-                <div style={{ flex: 1 }}>
-                    <TableContainer component={Paper} style={{ width: '100%' }}>
-                        <Table style={{ width: '100%' }}>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell colSpan={3} style={{ textAlign: 'center', fontWeight: 'bold' }}>РК</TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>№<br />стыка</TableCell>
-                                    <TableCell>Дефект</TableCell>
-                                    <TableCell>Результат</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {reports.map(report => (
-                                    <React.Fragment key={report.id}>
-                                        {renderDataPoints(report.RK, report.id, 'RK')}
-                                        {editingReportId === report.id && (
-                                            <TableRow>
-                                                <TableCell colSpan={3} align="center">
-                                                    <Button
-                                                        variant="outlined"
-                                                        onClick={() => addDataRow(report.id, 'RK')}
-                                                    >
-                                                        Добавить строку
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </React.Fragment>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </div>
+                {renderTableSection('УЗТ', 'YZT', ['№точки', '№элемента', 'Результат замера'])}
+                {renderTableSection('ВИК', 'VIK', ['№стыка/участка', 'Обнаруженные дефекты', 'Результат'])}
+                {renderTableSection('ЦД', 'CD', ['№стыка/участка', 'Обнаруженные дефекты', 'Результат'])}
+                {renderTableSection('УЗК', 'YZK', ['№стыка/участка', 'Дефект', 'Результат'])}
+                {renderTableSection('ТВ', 'TV', ['№стыка/участка', 'Осн. мет', 'ЗТО', 'Шов'], true)}
+                {renderTableSection('РК', 'RK', ['№стыка/участка', 'Дефект', 'Результат'])}
             </div>
         </div>
     );
