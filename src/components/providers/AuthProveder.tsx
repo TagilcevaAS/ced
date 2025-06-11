@@ -1,10 +1,8 @@
 import { FC, createContext, useState, useEffect, useMemo } from "react";
-import { IUser, TypeSetState } from "../../types";
+import { IUser, IContext, AuthContextProps } from "../../types";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { doc, setDoc } from 'firebase/firestore';
-import { IContext } from '../../types';
-import { AuthContextProps } from '../../types';
 
 export const AuthContext = createContext<IContext>({} as IContext)
 
