@@ -6,12 +6,12 @@ import * as firebase from 'firebase/app'
 import { AuthProvider } from './components/providers/AuthProveder';
 
 firebase.initializeApp({
-  apiKey: "AIzaSyA3IWvyuF6obrwbm9J4NiPN7JJWj5elPrw",
-  authDomain: "project-578482658934874066.firebaseapp.com",
-  projectId: "project-578482658934874066",
-  storageBucket: "project-578482658934874066.firebasestorage.app",
-  messagingSenderId: "641666122192",
-  appId: "1:641666122192:web:77df0695c74b42c92a39d5"
+  apiKey: "AIzaSyDOzNq15zTwdI20CBQxp3SZ0Xqs-hqAKPI",
+  authDomain: "ced-39e61.firebaseapp.com",
+  projectId: "ced-39e61",
+  storageBucket: "ced-39e61.firebasestorage.app",
+  messagingSenderId: "792145140807",
+  appId: "1:792145140807:web:f9cb0dcbe2e31088e72562"
 })
 
 ReactDOM.render(
