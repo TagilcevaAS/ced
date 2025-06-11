@@ -14,7 +14,6 @@ export interface IUser {
 export interface IUserData {
     email: string
     password: string
-    name: string
 }
 
 export interface IContext {
@@ -61,3 +60,17 @@ export interface IReport {
     serialNumber?: number;
 }
 
+export interface ReportsProps {
+    categoryFilter: string;
+    setCategoryFilter: (filter: string) => void;
+}
+
+export interface ColumnFilter {
+    [key: string]: string;
+}
+
+export interface TableColumn {
+    name: string;
+    label: string;
+    isCheck?: boolean;
+}
