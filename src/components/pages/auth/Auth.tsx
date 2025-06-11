@@ -1,105 +1,66 @@
 import React, { FC, SyntheticEvent, useEffect, useState } from 'react';
-import { Alert, Button, ButtonGroup, Grid, TextField } from '@mui/material';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { Alert, Button, Grid, TextField } from '@mui/material';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useAuth } from '../../providers/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { IUserData } from '../../../types';
 
 const Auth: FC = () => {
-    const { ga, user } = useAuth()
-    const [isRegForm, setIsRegForm] = useState(false)
+    const { ga, user } = useAuth();
     const [userData, setUserData] = useState<IUserData>({
         email: '',
         password: '',
-        name: '',
-    } as IUserData)
-    const [error, setError] = useState('')
+    });
+    const [error, setError] = useState('');
 
     const handleLogin = async (e: SyntheticEvent<HTMLFormElement>) => {
-        e.preventDefault()
-        if (isRegForm) {
-            try {
-                const res = await createUserWithEmailAndPassword(
-                    ga,
-                    userData.email,
-                    userData.password
-                )
-                await updateProfile(res.user, {
-                    displayName: userData.name,
-                })
-            } catch (error: any) {
-                error.message && setError(error.message)
-            }
-        } else {
-            try {
-                await signInWithEmailAndPassword(
-                    ga,
-                    userData.email,
-                    userData.password
-                )
-            } catch (error: any) {
-                error.message && setError(error.message)
-            }
+        e.preventDefault();
+        try {
+            await signInWithEmailAndPassword(ga, userData.email, userData.password);
+        } catch (error: any) {
+            error.message && setError(error.message);
         }
-        setUserData({
-            email: '',
-            password: '',
-            name: '',
-        })
-    }
+        setUserData({ email: '', password: '' });
+    };
 
     const navigate = useNavigate();
-
-    useEffect(() => {
-        if (user) navigate('/')
-    }, [user])
-
+    useEffect(() => { if (user) navigate('/'); }, [user]);
 
     return (
-        <>
-            {error && (
-                <Alert severity='error' style={{ marginBottom: 20 }}>
-                    {error}
-                </Alert>
-            )}
-            <Grid display='flex' justifyContent='center' alignItems='center'>
+        <Grid container justifyContent="center" alignItems="center" style={{ minHeight: '100vh' }}>
+            <Grid item xs={10} sm={6} md={4}>
+                {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
                 <form onSubmit={handleLogin}>
-                    <TextField
-                        label='Name'
-                        variant='outlined'
-                        value={userData.name}
-                        onChange={e => setUserData({ ...userData, name: e.target.value })}
-                        sx={{ display: 'block', marginBottom: 1 }}
-                        required
-                    />
                     <TextField
                         type='email'
                         label='Email'
-                        variant='outlined'
                         value={userData.email}
-                        onChange={e => setUserData({ ...userData, email: e.target.value })}
-                        sx={{ display: 'block', marginBottom: 1 }}
+                        onChange={e => setUserData({...userData, email: e.target.value})}
+                        fullWidth
+                        margin='normal'
                         required
                     />
                     <TextField
                         type='password'
                         label='Password'
-                        variant='outlined'
                         value={userData.password}
-                        onChange={e => setUserData({ ...userData, password: e.target.value })}
-                        sx={{ display: 'block', marginBottom: 2 }}
+                        onChange={e => setUserData({...userData, password: e.target.value})}
+                        fullWidth
+                        margin='normal'
                         required
                     />
-                    <ButtonGroup variant='outlined'>
-                        <Button type='submit' onClick={() => setIsRegForm(false)}>Auth</Button>
-                        
-                    </ButtonGroup>
+                    <Button 
+                        type='submit' 
+                        variant='contained' 
+                        fullWidth
+                        sx={{ mt: 2 }}
+                    >
+                        Войти
+                    </Button>
                 </form>
             </Grid>
-        </>
-    )
-}
+        </Grid>
+    );
+};
 
-//<Button type='submit' onClick={() => setIsRegForm(true)}>Register</Button>
-
-export default Auth
+export default Auth;
