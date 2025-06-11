@@ -10,7 +10,7 @@ const Main = () => {
             <Grid display='flex' justifyContent='center' alignItems='center'>
                 <Link to="/reports">
                     <button style={{ margin: '10px', padding: '10px 20px' }}>Отчеты</button>
-                </Link>    
+                </Link>
                 <Link to="/button1">
                     <button style={{ margin: '10px', padding: '10px 20px' }}>Кнопка</button>
                 </Link>
@@ -18,7 +18,7 @@ const Main = () => {
                     <button style={{ margin: '10px', padding: '10px 20px' }}>Кнопка</button>
                 </Link>
                 <Button variant='outlined' onClick={() => signOut(ga)}>
-                        Exit
+                        Выход
                 </Button>
             </Grid>
         </>
