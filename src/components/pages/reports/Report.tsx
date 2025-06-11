@@ -1,18 +1,13 @@
 import React, { FC, useEffect, useState, useCallback } from 'react';
 import { collection, onSnapshot, Timestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../../providers/useAuth';
-import { IReport, IDataPoint } from '../../../types';
+import { IReport, IDataPoint, ReportsProps } from '../../../types';
 import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, TextField, Box } from '@mui/material';
 import * as XLSX from 'xlsx';
 import { useParams } from 'react-router-dom';
 import { ChangeEvent } from 'react';
 
-interface ReportProps {
-    categoryFilter: string;
-    setCategoryFilter: (filter: string) => void;
-}
-
-const Report: FC<ReportProps> = ({ categoryFilter, setCategoryFilter }) => {
+const Report: FC<ReportsProps> = ({ categoryFilter, setCategoryFilter }) => {
     const { id } = useParams<{ id: string }>();
     const { db, user } = useAuth();
     const [reports, setReports] = useState<IReport[]>([]);

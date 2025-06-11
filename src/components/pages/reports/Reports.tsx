@@ -1,25 +1,10 @@
 import React, { FC, useEffect, useState, useMemo, useCallback } from 'react';
 import { collection, onSnapshot, Timestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../../providers/useAuth';
-import { IReport } from '../../../types';
+import { IReport, TableColumn, ReportsProps, ColumnFilter } from '../../../types';
 import { Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, TextField, MenuItem, Popover } from '@mui/material';
 import * as XLSX from 'xlsx';
 import FilterListIcon from '@mui/icons-material/FilterList';
-
-interface ReportsProps {
-    categoryFilter: string;
-    setCategoryFilter: (filter: string) => void;
-}
-
-interface ColumnFilter {
-    [key: string]: string;
-}
-
-interface TableColumn {
-    name: string;
-    label: string;
-    isCheck?: boolean;
-}
 
 const COLUMNS: TableColumn[] = [
     { name: 'customer', label: 'Заказчик' },
@@ -89,7 +74,6 @@ const Reports: FC<ReportsProps> = ({ categoryFilter }) => {
     const [filterAnchorEl, setFilterAnchorEl] = useState<null | HTMLElement>(null);
     const [currentFilterColumn, setCurrentFilterColumn] = useState('');
 
-    // Fetch reports data
     useEffect(() => {
         const unsub = onSnapshot(collection(db, 'unsubmitted_reports'), (snapshot) => {
             const reportData: IReport[] = [];
@@ -122,7 +106,6 @@ const Reports: FC<ReportsProps> = ({ categoryFilter }) => {
         return unsub;
     }, [db, categoryFilter]);
 
-    // Filter handlers
     const handleFilterClick = useCallback((event: React.MouseEvent<HTMLElement>, columnName: string) => {
         setCurrentFilterColumn(columnName);
         setFilterAnchorEl(event.currentTarget);
@@ -148,7 +131,6 @@ const Reports: FC<ReportsProps> = ({ categoryFilter }) => {
         setCurrentPage(0);
     }, [columnFilters]);
 
-    // Filter application
     const filteredReports = useMemo(() => {
         return reports.filter(report => {
             return Object.entries(columnFilters).every(([column, filterValue]) => {
@@ -175,7 +157,6 @@ const Reports: FC<ReportsProps> = ({ categoryFilter }) => {
         });
     }, [reports, columnFilters, currentPage, searchTerm]);
 
-    // Pagination
     const currentReports = useMemo(() => {
         return filteredReports.slice(currentPage * REPORTS_PER_PAGE, (currentPage + 1) * REPORTS_PER_PAGE);
     }, [filteredReports, currentPage]);
@@ -184,7 +165,6 @@ const Reports: FC<ReportsProps> = ({ categoryFilter }) => {
         return Math.ceil(filteredReports.length / REPORTS_PER_PAGE);
     }, [filteredReports]);
 
-    // Report selection
     const handleSelectReport = useCallback((reportId: string) => {
         setReports(prevReports =>
             prevReports.map(report =>
@@ -195,7 +175,6 @@ const Reports: FC<ReportsProps> = ({ categoryFilter }) => {
 
     const selectedReports = useMemo(() => reports.filter(report => report.selected), [reports]);
 
-    // Excel export
     const downloadSelectedReport = useCallback(() => {
         generateExcel(selectedReports, 'selected_reports.xlsx');
     }, [selectedReports]);
@@ -204,7 +183,6 @@ const Reports: FC<ReportsProps> = ({ categoryFilter }) => {
         generateExcel(reports, 'journal_reports.xlsx');
     }, [reports]);
 
-    // Report deletion
     const deleteSelectedReports = useCallback(async () => {
         if (user?.email !== 'admin@gmail.com') return;
 
@@ -218,7 +196,6 @@ const Reports: FC<ReportsProps> = ({ categoryFilter }) => {
         }
     }, [selectedReports, db, user]);
 
-    // Navigation
     const openSelectedReport = useCallback(() => {
         const selectedReportId = selectedReports[0]?.id;
         if (selectedReportId) {
@@ -247,7 +224,6 @@ const Reports: FC<ReportsProps> = ({ categoryFilter }) => {
         }
     }, [searchTerm, totalPages]);
 
-    // Unique values for filter dropdown
     const getUniqueValues = useCallback((columnName: string) => {
         const columnConfig = COLUMNS.find(c => c.name === columnName);
         
@@ -308,8 +284,6 @@ const Reports: FC<ReportsProps> = ({ categoryFilter }) => {
         </>
     );
 };
-
-// Sub-components for better organization
 
 interface ActionButtonsProps {
     hasSelected: boolean;
