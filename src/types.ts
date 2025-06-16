@@ -29,10 +29,10 @@ export interface AuthContextProps {
 }
 
 export interface IDataPoint {
-    a?: string[];
-    b?: string[];
-    c?: string[];
-    d?: string[];
+    a?: string | string[];
+    b?: string | string[];
+    c?: string | string[];
+    d?: string | string[];
 }
 
 export interface IReport {
