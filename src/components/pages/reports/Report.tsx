@@ -58,10 +58,10 @@ const Report: FC<ReportsProps> = ({ categoryFilter, setCategoryFilter }) => {
                     ...doc.data() as Omit<IReport, 'id'>
                 }))
                 .filter(report => id === report.id && (categoryFilter === '' || report.customer.includes(categoryFilter)));
-            
+
             setReports(reportData);
         });
-        
+
         return () => unsub();
     }, [db, categoryFilter, id]);
 
@@ -98,7 +98,7 @@ const Report: FC<ReportsProps> = ({ categoryFilter, setCategoryFilter }) => {
 
             const updatedValues = editedValues[reportId] || {};
             const reportRef = doc(db, 'unsubmitted_reports', reportId);
-            
+
             await updateDoc(reportRef, updatedValues);
             setEditingReportId(null);
             setEditedValues({});
@@ -113,8 +113,8 @@ const Report: FC<ReportsProps> = ({ categoryFilter, setCategoryFilter }) => {
     }, []);
 
     const handleInputChange = useCallback((
-        event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, 
-        reportId: string, 
+        event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+        reportId: string,
         field: keyof IReport
     ) => {
         const value = event.target.value;
@@ -136,19 +136,35 @@ const Report: FC<ReportsProps> = ({ categoryFilter, setCategoryFilter }) => {
     ) => {
         setReports(prev => prev.map(report => {
             if (report.id !== reportId) return report;
-            
+
             const currentDataPoint = report[dataPointKey];
             if (!currentDataPoint || typeof currentDataPoint !== 'object') return report;
 
             const dataPoint = { ...currentDataPoint as IDataPoint };
-            const updatedArray = [...(dataPoint[field] || [])];
+
+            const currentFieldValue = dataPoint[field];
+
+            let currentArray: string[];
+            if (typeof currentFieldValue === 'string') {
+                currentArray = currentFieldValue.split(';').map(item => item.trim());
+            } else if (Array.isArray(currentFieldValue)) {
+                currentArray = currentFieldValue.flatMap(v =>
+                    typeof v === 'string' ? v.split(';').map(item => item.trim()) : []
+                );
+            } else {
+                currentArray = [];
+            }
+
+            const updatedArray = [...currentArray];
             updatedArray[index] = value;
+
+            const updatedValue = updatedArray.join(';');
 
             return {
                 ...report,
                 [dataPointKey]: {
                     ...dataPoint,
-                    [field]: updatedArray
+                    [field]: updatedValue
                 }
             };
         }));
@@ -157,19 +173,22 @@ const Report: FC<ReportsProps> = ({ categoryFilter, setCategoryFilter }) => {
     const addDataRow = useCallback((reportId: string, dataPointKey: keyof IReport) => {
         setReports(prev => prev.map(report => {
             if (report.id !== reportId) return report;
-            
-            const currentDataPoint = report[dataPointKey];
-            if (!currentDataPoint || typeof currentDataPoint !== 'object') return report;
 
-            const dataPoint = { ...currentDataPoint as IDataPoint };
-            
+            const currentDataPoint = report[dataPointKey] as IDataPoint | undefined;
+
+            const addEmptyToField = (fieldValue: string | string[] | undefined): string => {
+                if (!fieldValue) return ';';
+                if (typeof fieldValue === 'string') return `${fieldValue};`;
+                return [...fieldValue, ''].join(';');
+            };
+
             return {
                 ...report,
                 [dataPointKey]: {
-                    a: [...(dataPoint.a || []), ''],
-                    b: [...(dataPoint.b || []), ''],
-                    c: [...(dataPoint.c || []), ''],
-                    d: [...(dataPoint.d || []), ''],
+                    a: addEmptyToField(currentDataPoint?.a),
+                    b: addEmptyToField(currentDataPoint?.b),
+                    c: addEmptyToField(currentDataPoint?.c),
+                    d: addEmptyToField(currentDataPoint?.d),
                 }
             };
         }));
@@ -178,10 +197,18 @@ const Report: FC<ReportsProps> = ({ categoryFilter, setCategoryFilter }) => {
     const renderDataPoints = useCallback((dataPoint: IDataPoint | undefined, reportId: string, dataPointKey: keyof IReport) => {
         if (!dataPoint) return null;
 
-        const a = dataPoint.a || [];
-        const b = dataPoint.b || [];
-        const c = dataPoint.c || [];
-        const d = dataPoint.d || [];
+        const splitValues = (fieldValue: string | string[] | undefined): string[] => {
+            if (!fieldValue) return [];
+            if (typeof fieldValue === 'string') return fieldValue.split(';').map(item => item.trim());
+            return fieldValue.flatMap(v =>
+                typeof v === 'string' ? v.split(';').map(item => item.trim()) : []
+            );
+        };
+
+        const a = splitValues(dataPoint.a);
+        const b = splitValues(dataPoint.b);
+        const c = splitValues(dataPoint.c);
+        const d = splitValues(dataPoint.d);
         const maxLength = Math.max(a.length, b.length, c.length, d.length);
 
         return (
@@ -240,7 +267,7 @@ const Report: FC<ReportsProps> = ({ categoryFilter, setCategoryFilter }) => {
                     {editingReportId === report.id && user?.email === 'admin@gmail.com' ? (
                         <TextField
                             defaultValue={report[field] as string}
-                            onChange={(e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => 
+                            onChange={(e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
                                 handleInputChange(e, report.id, field)}
                         />
                     ) : (
@@ -252,9 +279,9 @@ const Report: FC<ReportsProps> = ({ categoryFilter, setCategoryFilter }) => {
     );
 
     const renderTableSection = (
-        title: string, 
-        dataPointKey: keyof Pick<IReport, 'YZT' | 'VIK' | 'CD' | 'YZK' | 'TV' | 'RK'>, 
-        headers: string[], 
+        title: string,
+        dataPointKey: keyof Pick<IReport, 'YZT' | 'VIK' | 'CD' | 'YZK' | 'TV' | 'RK'>,
+        headers: string[],
         hasDColumn = false
     ) => (
         <div style={{ flex: 1, marginRight: '10px' }}>
@@ -322,7 +349,7 @@ const Report: FC<ReportsProps> = ({ categoryFilter, setCategoryFilter }) => {
                                     <TableCell key={report.id}>
                                         {report.createdAt instanceof Timestamp ? (
                                             new Intl.DateTimeFormat('ru-RU', {
-                                                day: 'numeric', month: 'long', year: 'numeric', 
+                                                day: 'numeric', month: 'long', year: 'numeric',
                                                 hour: 'numeric', minute: 'numeric',
                                             }).format(report.createdAt.toDate())
                                         ) : 'Нет даты'}
